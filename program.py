@@ -1,5 +1,6 @@
 import random as rd
 import numpy as np
+import csv
 
 
 def initialize_network(n_inputs, n_hidden, n_outputs):
@@ -66,22 +67,90 @@ def backward_propagate_error(network, expected):
 def update_weights(network, row, l_rate):
     inputs = row
     for layer in network:
-        new_inputs = []
+        newInputs = []
         for neuron in layer:
-            for i in range(len(neuron['weights'])-1):
-                neuron['weights'][i] += l_rate * neuron['delta'] + inputs[i]
-            neuron['weights'][len(neuron['weights'])-1] += l_rate * neuron['delta']
-            new_inputs.append(neuron['output'])
-        inputs = new_inputs
+            newWeights = []
+            for i in range(len(neuron['weights']) - 1):
+                newWeights.append(neuron['weights'][i] + l_rate * neuron['delta'] * inputs[i])
+            newInputs.append(neuron['output'])
+            newWeights.append((neuron['weights'][-1] + l_rate * neuron['delta']))
+            neuron['weights'] = newWeights
+        inputs = newInputs
+
+
+def train_network(network, train, l_rate, n_epoch, n_outputs):
+    # n_epoch defines number of iterations for the training process
+    for epoch in range(n_epoch):
+        sum_error = 0
+        for row in train:
+            outputs = forward_propagate(network, row[:-1])
+            expected = [0 for i in range(n_outputs)]
+            expected[int(row[-1])] = 1
+            for i in range(n_outputs):
+                sum_error += np.sqrt((expected[i] - outputs[i])**2)
+            backward_propagate_error(network, expected)  # call the backpropagation function for network and expected vector for computing and adding delta to the network
+            update_weights(network, row[:-1], l_rate)  # call update_weights for modifying weights in the network
+        print('> epoch = %d, lrate = %.3f, error = %.3f' % (epoch, l_rate, sum_error))
+
+
+def predict(network, row):
+    # network = trained network
+    probability = forward_propagate(network, row)
+    print(probability)
+    return np.argmax(probability)
+
+
+def load_csv(filename):
+    dataset=[]
+    with open(filename, 'r') as csvfile:
+        reader = csv.reader(csvfile, delimiter='\t') # does not parse ?
+        for row in reader:
+            row_float = []
+            row_split = row[0].split('\t')
+            for entry in row_split:
+                row_float.append(float(entry))
+            dataset.append(row_float)
+
+    # normalization :
+    for i in range(len(dataset)):
+        for j in range(len(dataset[i])-1):
+          dataset[i][j] = (dataset[i][j] - np.mean([row[j] for row in dataset]))/np.std([row[j] for row in dataset])
+    return dataset
+
+
+def split_dataset(dataset, p):
+    rd.shuffle(dataset)
+    train_data = []
+    test_data = []
+    n = int(p*len(dataset))
+    for i in range(n):
+        train_data.append(dataset[i])
+    for i in range(n, len(dataset)):
+        test_data.append(dataset[i])
+    return train_data, test_data
 
 
 if __name__ == "__main__":
-    rd.seed(1)
+    rd.seed()
 
-    network = initialize_network(3, 2, 2)
-    row = [2, 1, 3]
-    forward_propagate(network, row)
-    backward_propagate_error(network, row)
-    print(np.array(network))
-    update_weights(network, row, 0.1)
-    print(np.array(network))
+    network = initialize_network(7, 16, 3)
+    dataset = load_csv("seeds_dataset.csv")
+    #print(np.array(dataset))
+    for row in dataset:
+        row[-1]=row[-1]-1 # outputs were 1,2 or 3 and are now 0,1 or 2 for practical reasons 
+
+    train_data, test_data = split_dataset(dataset, 0.8)
+
+
+    train_network(network, train_data, 0.5, 800, 3)
+    success_rate = 0
+    for test_row in test_data:
+        prediction = predict(network, test_row[:-1])
+        print(test_row[-1], prediction)
+        if test_row[-1] == prediction: success_rate+=1
+    print("success rate: ", success_rate*100/len(test_data), "%")
+
+
+
+
+
